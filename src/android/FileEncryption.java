@@ -28,6 +28,7 @@ import com.facebook.crypto.exception.CryptoInitializationException;
 import com.facebook.crypto.exception.KeyChainException;
 import com.facebook.android.crypto.keychain.SharedPrefsBackedKeyChain;
 import com.facebook.crypto.keychain.KeyChain;
+import com.facebook.soloader.SoLoader;
 
 
 /**
@@ -101,7 +102,7 @@ public class FileEncryption extends CordovaPlugin {
 
         callbackContext.success(dst.getPath());
       } else {
-        callbackContext.error(1);
+        callbackContext.error("cryptOp source file not deleted");
       }
     } catch (IOException e) {
       LOG.d(TAG, "initCrypto IOException: " + e.getMessage());
@@ -124,6 +125,7 @@ public class FileEncryption extends CordovaPlugin {
       FILE_NAME = SOURCE_URI.getLastPathSegment();
 
       CONTEXT = cordova.getActivity().getApplicationContext();
+      SoLoader.init(CONTEXT, false);
 
       SOURCE_FILE = new File(SOURCE_URI.getPath());
 
@@ -136,7 +138,7 @@ public class FileEncryption extends CordovaPlugin {
 
       // check for whether crypto is available
       if (!CRYPTO.isAvailable()) {
-        callbackContext.error(1);
+        callbackContext.error("initCrypto CRYPTO is not available");
         return;
       }
 
