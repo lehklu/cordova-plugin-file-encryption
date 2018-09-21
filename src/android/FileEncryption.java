@@ -30,6 +30,13 @@ import com.facebook.android.crypto.keychain.SharedPrefsBackedKeyChain;
 import com.facebook.crypto.keychain.KeyChain;
 import com.facebook.soloader.SoLoader;
 
+/* PassphraseKeyChain */
+import com.facebook.crypto.MacConfig;
+import java.util.Arrays;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+/**/
 
 /**
  * This class encrypts and decrypts files using the Conceal encryption lib
@@ -53,6 +60,8 @@ public class FileEncryption extends CordovaPlugin {
   private File SOURCE_FILE;
   private File TEMP_FILE;
 
+	private MessageDigest MESSAGEDIGEST;
+
   @Override
   public boolean execute(String action, JSONArray args, CallbackContext callbackContext)
           throws JSONException {
@@ -61,11 +70,13 @@ public class FileEncryption extends CordovaPlugin {
 
       String path = args.getString(0);
       String pass = args.getString(1);
+      boolean passIsKey = Boolean.parseBoolean(args.getString(2));
+
       Uri normalizedPath = resourceApi.remapUri(Uri.parse(path));
 
       LOG.d(TAG, "normalizedPath: "+ normalizedPath.getPath().toString());
 
-      this.cryptOp(normalizedPath.toString(), pass, action, callbackContext);
+      this.cryptOp(normalizedPath.toString(), pass, action, passIsKey, callbackContext);
 
       return true;
     }
@@ -73,13 +84,17 @@ public class FileEncryption extends CordovaPlugin {
     return false;
   }
 
-  private void cryptOp(String path, String password, String action, CallbackContext callbackContext) {
-    // init crypto variables
-    this.initCrypto(path, password, callbackContext);
+  private void cryptOp(String path, String password, String action, boolean passIsKey, CallbackContext callbackContext) {
 
-    // create output stream which encrypts the data as
-    // it is written to it and writes out to the file
     try {
+			MESSAGEDIGEST = MESSAGEDIGEST!=null?MESSAGEDIGEST:MessageDigest.getInstance("SHA-256");
+
+    	// init crypto variables
+    	this.initCrypto(path, password, passIsKey, callbackContext);
+
+
+    	// create output stream which encrypts the data as
+    	// it is written to it and writes out to the file
       if (action.equals(ENCRYPT_ACTION)) {
         // create encrypted output stream
         OutputStream encryptedOutputStream = CRYPTO.getCipherOutputStream(OUTPUT_STREAM, ENTITY);
@@ -113,13 +128,16 @@ public class FileEncryption extends CordovaPlugin {
     } catch (KeyChainException e) {
       LOG.d(TAG, "initCrypto KeyChainException: " + e.getMessage());
       callbackContext.error(e.getMessage());
+    } catch (NoSuchAlgorithmException e) {
+      LOG.d(TAG, "initCrypto NoSuchAlgorithmException: " + e.getMessage());
+      callbackContext.error(e.getMessage());
     } catch (Exception e) {
       LOG.d(TAG, "initCrypto Exception: " + e.getMessage());
       callbackContext.error(e.getMessage());
     }
   }
 
-  private void initCrypto(String path, String password, CallbackContext callbackContext) {
+  private void initCrypto(String path, String password, boolean passIsKey, CallbackContext callbackContext) {
     if (path != null && path.length() > 0 && password != null && password.length() > 0) {
       SOURCE_URI  = Uri.parse(path);
       FILE_NAME = SOURCE_URI.getLastPathSegment();
@@ -130,7 +148,9 @@ public class FileEncryption extends CordovaPlugin {
       SOURCE_FILE = new File(SOURCE_URI.getPath());
 
       // explicitely create 256-bit key chain
-      KeyChain keyChain = new SharedPrefsBackedKeyChain(CONTEXT, CryptoConfig.KEY_256);
+      KeyChain keyChain = passIsKey?
+      	new PassphraseKeyChain(CONTEXT, CryptoConfig.KEY_256, MESSAGEDIGEST.digest(password.getBytes(StandardCharsets.UTF_8))):
+      	new SharedPrefsBackedKeyChain(CONTEXT, CryptoConfig.KEY_256);
       // create the default crypto (expects 256-bit key) and initialize crypto object
       CRYPTO = AndroidConceal.get().createDefaultCrypto(keyChain);
 
@@ -203,5 +223,96 @@ public class FileEncryption extends CordovaPlugin {
       out.close();
 
       LOG.d(TAG, "copyFile called ");
+  }
+}
+
+/**
+ * An implementation of a keychain that is based on a passphrase.
+ */
+class PassphraseKeyChain implements KeyChain {
+
+	private byte[] mPassphraseBytes;
+
+  private final CryptoConfig mCryptoConfig;
+
+  protected byte[] mCipherKey;
+  protected boolean mIsCipherKeySet;
+
+  protected byte[] mMacKey;
+  protected boolean mIsMacKeySet;
+
+  public PassphraseKeyChain(Context context, CryptoConfig config, byte[] passphraseBytes) {
+    mCryptoConfig = config;
+
+		mPassphraseBytes = passphraseBytes;
+  }
+
+  @Override
+  public synchronized byte[] getCipherKey() throws KeyChainException {
+
+    if(!mIsCipherKeySet)
+    {
+			mCipherKey = generateKey(mCryptoConfig.keyLength);
+    }
+
+    mIsCipherKeySet = true;
+    return mCipherKey;
+  }
+
+  @Override
+  public byte[] getMacKey() throws KeyChainException {
+
+    if(!mIsMacKeySet)
+    {
+			mMacKey = generateKey(MacConfig.DEFAULT.keyLength);
+    }
+
+    mIsMacKeySet = true;
+    return mMacKey;
+  }
+
+  @Override
+  public byte[] getNewIV() throws KeyChainException {
+
+    byte[] iv = new byte[mCryptoConfig.ivLength];
+
+		fillKey(iv);
+
+    return iv;
+  }
+
+  @Override
+  public synchronized void destroyKeys() {
+
+		Arrays.fill(mPassphraseBytes, (byte) 0);
+		mPassphraseBytes=null;
+
+    mIsCipherKeySet = false;
+    mIsMacKeySet = false;
+    if (mCipherKey != null) {
+      Arrays.fill(mCipherKey, (byte) 0);
+    }
+    if (mMacKey != null) {
+      Arrays.fill(mMacKey, (byte) 0);
+    }
+    mCipherKey = null;
+    mMacKey = null;
+  }
+
+  private byte[] generateKey(int length) throws KeyChainException {
+
+    byte[] key = new byte[length];
+
+    fillKey(key);
+
+    return key;
+  }
+
+  private void fillKey(byte[] target) {
+
+		for(int i=0, len=target.length; i<len; i++)
+		{
+   		target[i]=mPassphraseBytes[i%mPassphraseBytes.length];
+		}
   }
 }
