@@ -3,6 +3,11 @@ cordova-plugin-file-encryption
 
 > Cordova File Encryption Plugin for Android and iOS.
 
+> Fork because:
+> #### Android
+> - use facebook/conceal 2.0.1
+> - de/encryption using 'key' parameter
+
 ## Install
 
 ```bash
@@ -38,6 +43,11 @@ The plugin exposes the following methods:
 ```javascript
 cordova.plugins.fileEncryption.encrypt(file, key, success, error);
 cordova.plugins.fileEncryption.decrypt(file, key, success, error);
+```
+or de/encrypt using 'key' parameter:
+```javascript
+cordova.plugins.fileEncryption.encryptP(file, key, success, error);
+cordova.plugins.fileEncryption.decryptP(file, key, success, error);
 ```
 
 #### Parameters:
