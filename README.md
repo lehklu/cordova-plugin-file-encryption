@@ -6,7 +6,7 @@ cordova-plugin-file-encryption
 > Fork because:
 > #### Android
 > - use facebook/conceal 2.0.1
-> - de/encryption using 'key' parameter
+> - derive de/encryption key from 'key' parameter
 
 ## Install
 
