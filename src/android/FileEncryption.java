@@ -86,6 +86,9 @@ public class FileEncryption extends CordovaPlugin {
 
   private void cryptOp(String path, String password, String action, boolean passIsKey, CallbackContext callbackContext) {
 
+		OutputStream encryptedOutputStream=null;
+		InputStream decryptedInputStream=null;
+
     try {
 			MESSAGEDIGEST = MESSAGEDIGEST!=null?MESSAGEDIGEST:MessageDigest.getInstance("SHA-256");
 
@@ -97,14 +100,18 @@ public class FileEncryption extends CordovaPlugin {
     	// it is written to it and writes out to the file
       if (action.equals(ENCRYPT_ACTION)) {
         // create encrypted output stream
-        OutputStream encryptedOutputStream = CRYPTO.getCipherOutputStream(OUTPUT_STREAM, ENTITY);
+        encryptedOutputStream = CRYPTO.getCipherOutputStream(OUTPUT_STREAM, ENTITY);
         // write to temp file
         this.writeFile(INPUT_STREAM, encryptedOutputStream, callbackContext);
+        INPUT_STREAM=null; // closed in writeFile()
+        encryptedOutputStream=null; // closed in writeFile()
       } else if (action.equals(DECRYPT_ACTION)) {
         // create decrypted input stream
-        InputStream decryptedInputStream = CRYPTO.getCipherInputStream(INPUT_STREAM, ENTITY);
+        decryptedInputStream = CRYPTO.getCipherInputStream(INPUT_STREAM, ENTITY);
         // write to temp file
         this.writeFile(decryptedInputStream, OUTPUT_STREAM, callbackContext);
+        decryptedInputStream=null; // closed in writeFile()
+        OUTPUT_STREAM=null; // closed in writeFile()
       }
 
       // delete original file after write
@@ -121,19 +128,25 @@ public class FileEncryption extends CordovaPlugin {
       }
     } catch (IOException e) {
       LOG.d(TAG, "initCrypto IOException: " + e.getMessage());
-      callbackContext.error(e.getMessage());
+      callbackContext.error(e.getMessage() + " [#1]");
     } catch (CryptoInitializationException e) {
       LOG.d(TAG, "initCrypto CryptoInitializationException: " + e.getMessage());
-      callbackContext.error(e.getMessage());
+      callbackContext.error(e.getMessage() + " [#2]");
     } catch (KeyChainException e) {
       LOG.d(TAG, "initCrypto KeyChainException: " + e.getMessage());
-      callbackContext.error(e.getMessage());
+      callbackContext.error(e.getMessage() + " [#3]");
     } catch (NoSuchAlgorithmException e) {
       LOG.d(TAG, "initCrypto NoSuchAlgorithmException: " + e.getMessage());
-      callbackContext.error(e.getMessage());
+      callbackContext.error(e.getMessage() + " [#4]");
     } catch (Exception e) {
       LOG.d(TAG, "initCrypto Exception: " + e.getMessage());
-      callbackContext.error(e.getMessage());
+      callbackContext.error(e.getMessage() + " [#5]");
+    } finally {
+
+    	if(OUTPUT_STREAM!=null)					{ try{OUTPUT_STREAM.close();}					catch(Exception e) {/*empty*/}; }
+    	if(INPUT_STREAM!=null)					{ try{INPUT_STREAM.close();}					catch(Exception e) {/*empty*/}; }
+    	if(encryptedOutputStream!=null)	{ try{encryptedOutputStream.close();}	catch(Exception e) {/*empty*/}; }
+    	if(decryptedInputStream!=null)	{ try{decryptedInputStream.close();}	catch(Exception e) {/*empty*/}; }
     }
   }
 
@@ -171,42 +184,35 @@ public class FileEncryption extends CordovaPlugin {
         INPUT_STREAM = new FileInputStream(SOURCE_FILE);
       } catch (FileNotFoundException e) {
         LOG.d(TAG, "initCrypto FileNotFoundException: " + e.toString());
-        callbackContext.error(e.getMessage());
+        callbackContext.error(e.getMessage() + " [#6]");
         e.printStackTrace();
       } catch (IOException e) {
         LOG.d(TAG, "initCrypto IOException: " + e.toString());
-        callbackContext.error(e.getMessage());
+        callbackContext.error(e.getMessage() + " [#7]");
         e.printStackTrace();
       }
     } else {
       LOG.d(TAG, "initCrypto error ");
-      callbackContext.error(2);
+      callbackContext.error("initCrypto invalid path or password");
     }
   }
 
-  private void writeFile(InputStream inputStream, OutputStream outputStream, CallbackContext callbackContext) {
-    try {
-      // create new byte object with source file length
-      byte[] data = new byte[(int) SOURCE_FILE.length()];
+  private void writeFile(InputStream inputStream, OutputStream outputStream, CallbackContext callbackContext) throws IOException {
 
-      // read contents of source file byte by byte
-      int buffer = 0;
-      while ((buffer = inputStream.read(data)) > 0) {
-        // write contents to encrypted output stream
-        outputStream.write(data, 0, buffer);
-        outputStream.flush();
-      }
+	  // create new byte object with source file length
+	  byte[] data = new byte[(int) SOURCE_FILE.length()];
 
-      LOG.d(TAG, "writeFile called ");
+	  // read contents of source file byte by byte
+	  int dataSize = 0;
+	  while ((dataSize = inputStream.read(data)) > 0) {
+	    // write contents to encrypted output stream
+	    outputStream.write(data, 0, dataSize);
+	    outputStream.flush();
+	  }
 
-      // close output stream
-      outputStream.close();
-      inputStream.close();
-    } catch (IOException e) {
-      LOG.d(TAG, "writeFile error: " + e.toString());
-      callbackContext.error(e.getMessage());
-      e.printStackTrace();
-    }
+		outputStream.close();
+    inputStream.close();
+	  LOG.d(TAG, "writeFile called ");
   }
 
   public void copyFile(File source, File dest) throws IOException {
