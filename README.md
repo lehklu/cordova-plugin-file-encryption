@@ -8,6 +8,10 @@ cordova-plugin-file-encryption
 > - use facebook/conceal 2.0.1
 > - derive de/encryption key from 'key' parameter
 
+> #### iOS
+> - use path from arguments
+> - return error msg
+
 ## Install
 
 ```bash
