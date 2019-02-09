@@ -12,6 +12,9 @@ cordova-plugin-file-encryption
 > - use path from arguments
 > - return error msg
 
+(I switched to: https://github.com/lehklu/cordova-plugin-file-rncryptor)
+
+
 ## Install
 
 ```bash
